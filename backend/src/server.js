@@ -15,6 +15,7 @@ const paymentsRoutes = require("./routes/payments.routes");
 const chatRoutes = require("./routes/chat.routes");
 const plannerRoutes = require("./routes/planner.routes");
 const adminRoutes = require("./routes/admin.routes");
+const profileRoutes = require("./routes/profile.routes");
 
 const app = express();
 
@@ -44,6 +45,7 @@ app.use("/api/payments", paymentsRoutes);
 app.use("/api/chats", chatRoutes);
 app.use("/api/planner", plannerRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/profile", profileRoutes);
 
 // 404 handler
 app.use((req, res) => res.status(404).json({ error: "Not found" }));

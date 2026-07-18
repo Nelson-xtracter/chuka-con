@@ -40,6 +40,13 @@ enum PaymentPurpose {
   PREMIUM_SUBSCRIPTION
   MARKETPLACE_ITEM
   PLANNER_SUBSCRIPTION
+  WALLET_TOPUP
+}
+
+enum WithdrawalStatus {
+  PENDING
+  SUCCESS
+  FAILED
 }
 
 model User {
@@ -55,8 +62,10 @@ model User {
   premiumExpiresAt DateTime?
   referralCode     String   @unique
   referredById     String?
-  totpSecret       String?  // only set for ADMIN accounts (2FA)
+  totpSecret       String?  // set once the user enrolls in 2FA
   totpEnabled      Boolean  @default(false)
+  walletBalance    Int      @default(0) // in KES, whole shillings
+  avatarUrl        String?  @db.Text    // data URL (base64) of the profile photo
   createdAt        DateTime @default(now())
 
   projects        Project[]
@@ -65,10 +74,21 @@ model User {
   purchases       Purchase[]
   plagiarismScans PlagiarismCheck[]
   payments        Payment[]
+  withdrawals     Withdrawal[]
   xpEvents        XpEvent[]
   eventsPlanned   Event[]           @relation("PlannerEvents")
   messagesSent    Message[]
   chatMemberships ChatMember[]
+}
+
+model Withdrawal {
+  id          String           @id @default(uuid())
+  userId      String
+  user        User             @relation(fields: [userId], references: [id])
+  amount      Int
+  phone       String
+  status      WithdrawalStatus @default(PENDING)
+  createdAt   DateTime         @default(now())
 }
 
 model Event {

@@ -114,6 +114,13 @@ async function fulfillPayment(payment) {
       });
     }
   }
+
+  if (payment.purpose === "WALLET_TOPUP") {
+    await prisma.user.update({
+      where: { id: payment.userId },
+      data: { walletBalance: { increment: payment.amount } },
+    });
+  }
 }
 
 // ---------- Poll status (used by the Android app while waiting for the callback) ----------

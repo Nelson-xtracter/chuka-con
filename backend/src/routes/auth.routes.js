@@ -26,6 +26,9 @@ function toUserDto(user) {
     xp: user.xp,
     isPremium: user.isPremium,
     referralCode: user.referralCode,
+    walletBalance: user.walletBalance,
+    avatarUrl: user.avatarUrl,
+    totpEnabled: user.totpEnabled,
   };
 }
 
