@@ -1,0 +1,219 @@
+// =========================================================
+// Chuka Connect — Database schema
+// Datasource: PostgreSQL (Neon)
+// =========================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  PLANNER
+  ADMIN
+}
+
+enum ProjectType {
+  INDIVIDUAL
+  GROUP
+}
+
+enum SubmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum PaymentPurpose {
+  EVENT_TICKET
+  PREMIUM_SUBSCRIPTION
+  MARKETPLACE_ITEM
+  PLANNER_SUBSCRIPTION
+}
+
+model User {
+  id               String   @id @default(uuid())
+  name             String
+  email            String   @unique
+  phone            String   @unique
+  passwordHash     String
+  role             Role     @default(STUDENT)
+  level            Int      @default(1)
+  xp               Int      @default(0)
+  isPremium        Boolean  @default(false)
+  premiumExpiresAt DateTime?
+  referralCode     String   @unique
+  referredById     String?
+  totpSecret       String?  // only set for ADMIN accounts (2FA)
+  totpEnabled      Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  projects        Project[]
+  submissions     Submission[]
+  tickets         Ticket[]
+  purchases       Purchase[]
+  plagiarismScans PlagiarismCheck[]
+  payments        Payment[]
+  xpEvents        XpEvent[]
+  eventsPlanned   Event[]           @relation("PlannerEvents")
+  messagesSent    Message[]
+  chatMemberships ChatMember[]
+}
+
+model Event {
+  id          String   @id @default(uuid())
+  title       String
+  tag         String? // VIP, Featured, Networking...
+  description String
+  date        DateTime
+  location    String
+  price       Int      @default(0)
+  capacity    Int      @default(100)
+  createdAt   DateTime @default(now())
+
+  planner   User?   @relation("PlannerEvents", fields: [plannerId], references: [id])
+  plannerId String?
+
+  tickets Ticket[]
+}
+
+model Ticket {
+  id           String   @id @default(uuid())
+  code         String   @unique // QR payload
+  isVip        Boolean  @default(false)
+  checkedIn    Boolean  @default(false)
+  checkedInAt  DateTime?
+  purchasedAt  DateTime @default(now())
+
+  event   Event  @relation(fields: [eventId], references: [id])
+  eventId String
+  user    User   @relation(fields: [userId], references: [id])
+  userId  String
+}
+
+model Project {
+  id       String      @id @default(uuid())
+  title    String
+  type     ProjectType @default(INDIVIDUAL)
+  progress Int         @default(0)
+  dueDate  DateTime
+  createdAt DateTime   @default(now())
+
+  owner   User   @relation(fields: [ownerId], references: [id])
+  ownerId String
+}
+
+model MarketplaceItem {
+  id           String   @id @default(uuid())
+  title        String
+  category     String // Projects | Documentation | Ideas
+  price        Int
+  rating       Float    @default(0)
+  reviewsCount Int      @default(0)
+  fileUrl      String?
+  createdAt    DateTime @default(now())
+
+  purchases Purchase[]
+}
+
+model Purchase {
+  id         String   @id @default(uuid())
+  amount     Int
+  commission Int // 70% platform commission, computed at purchase time
+  createdAt  DateTime @default(now())
+
+  item   MarketplaceItem @relation(fields: [itemId], references: [id])
+  itemId String
+  buyer  User            @relation(fields: [buyerId], references: [id])
+  buyerId String
+}
+
+model Submission {
+  id          String           @id @default(uuid())
+  title       String
+  fileUrl     String
+  status      SubmissionStatus @default(PENDING)
+  submittedAt DateTime         @default(now())
+  reviewedAt  DateTime?
+  reviewNote  String?
+
+  student   User   @relation(fields: [studentId], references: [id])
+  studentId String
+}
+
+model PlagiarismCheck {
+  id        String   @id @default(uuid())
+  filename  String
+  score     Int // similarity percentage
+  checkedAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+}
+
+model Payment {
+  id                String        @id @default(uuid())
+  purpose           PaymentPurpose
+  amount            Int
+  phone             String
+  status            PaymentStatus @default(PENDING)
+  mpesaCheckoutId   String?
+  mpesaReceipt      String?
+  relatedId         String? // eventId / marketplaceItemId depending on purpose
+  createdAt         DateTime      @default(now())
+  completedAt       DateTime?
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+}
+
+model XpEvent {
+  id        String   @id @default(uuid())
+  amount    Int
+  reason    String
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+}
+
+model Chat {
+  id        String       @id @default(uuid())
+  name      String
+  isGroup   Boolean      @default(false)
+  createdAt DateTime     @default(now())
+  members   ChatMember[]
+  messages  Message[]
+}
+
+model ChatMember {
+  id     String @id @default(uuid())
+  chat   Chat   @relation(fields: [chatId], references: [id])
+  chatId String
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+
+  @@unique([chatId, userId])
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  text      String
+  createdAt DateTime @default(now())
+
+  chat     Chat   @relation(fields: [chatId], references: [id])
+  chatId   String
+  sender   User   @relation(fields: [senderId], references: [id])
+  senderId String
+}

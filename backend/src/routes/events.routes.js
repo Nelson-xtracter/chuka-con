@@ -1,0 +1,108 @@
+const express = require("express");
+const { v4: uuid } = require("uuid");
+const { prisma } = require("../config/db");
+const { requireAuth, requireRole } = require("../middleware/auth");
+const { awardXp } = require("../services/xp");
+
+const router = express.Router();
+
+function toEventDto(event) {
+  const sold = event.tickets ? event.tickets.length : event._count?.tickets ?? 0;
+  return {
+    id: event.id,
+    title: event.title,
+    tag: event.tag,
+    description: event.description,
+    date: event.date.toISOString(),
+    location: event.location,
+    price: event.price,
+    capacity: event.capacity,
+    sold,
+  };
+}
+
+// ---------- Browse events ----------
+router.get("/", requireAuth, async (req, res) => {
+  const { filter } = req.query;
+  const where = {};
+  if (filter === "VIP") where.tag = "VIP";
+  if (filter === "Upcoming") where.date = { gte: new Date() };
+
+  const events = await prisma.event.findMany({
+    where,
+    include: { _count: { select: { tickets: true } } },
+    orderBy: { date: "asc" },
+  });
+
+  res.json(events.map(toEventDto));
+});
+
+router.get("/my-tickets", requireAuth, async (req, res) => {
+  const tickets = await prisma.ticket.findMany({
+    where: { userId: req.user.id },
+    include: { event: true },
+    orderBy: { purchasedAt: "desc" },
+  });
+  res.json(
+    tickets.map((t) => ({
+      id: t.id,
+      code: t.code,
+      isVip: t.isVip,
+      checkedIn: t.checkedIn,
+      event: toEventDto(t.event),
+    }))
+  );
+});
+
+router.get("/:id", requireAuth, async (req, res) => {
+  const event = await prisma.event.findUnique({
+    where: { id: req.params.id },
+    include: { _count: { select: { tickets: true } } },
+  });
+  if (!event) return res.status(404).json({ error: "Event not found" });
+  res.json(toEventDto(event));
+});
+
+// ---------- Planner: create an event ----------
+router.post("/", requireAuth, requireRole("PLANNER", "ADMIN"), async (req, res) => {
+  const { title, tag, description, date, location, price, capacity } = req.body;
+  const event = await prisma.event.create({
+    data: {
+      title,
+      tag,
+      description,
+      date: new Date(date),
+      location,
+      price: price || 0,
+      capacity: capacity || 100,
+      plannerId: req.user.id,
+    },
+  });
+  res.json(toEventDto(event));
+});
+
+// ---------- Planner: scan / manual check-in ----------
+router.post("/check-in", requireAuth, requireRole("PLANNER", "ADMIN"), async (req, res) => {
+  const { ticketCode } = req.body;
+  const ticket = await prisma.ticket.findUnique({ where: { code: ticketCode }, include: { event: true } });
+  if (!ticket) return res.status(404).json({ error: "Ticket not found" });
+
+  const updated = await prisma.ticket.update({
+    where: { id: ticket.id },
+    data: { checkedIn: true, checkedInAt: new Date() },
+    include: { event: true },
+  });
+
+  // Reward the attendee with XP for showing up (daily quest style bonus)
+  await awardXp(ticket.userId, 50, "Checked in at an event");
+
+  res.json({
+    id: updated.id,
+    code: updated.code,
+    isVip: updated.isVip,
+    checkedIn: updated.checkedIn,
+    event: toEventDto(updated.event),
+  });
+});
+
+module.exports = router;
